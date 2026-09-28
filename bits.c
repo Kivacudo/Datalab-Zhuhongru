@@ -328,14 +328,41 @@ int res_floor = (x & y) + ((x ^ y) >> 1);
  *   Rating: 7
  */
 int isBetweenEitherOrder(int x, int a, int b) {
-int diffa=((a+~x+1)>>31)&1;//a-x
-int signa=(a>>31)&1;
-int signx=(x>>31)&1;
-int signb=(b>>31)&1;
-int diffb=((b+~x+1)>>31)&1;//b-x
-diffa= (diffa|((signa&1)&(!(signx|0))))&(!(!(signa|0)&(signx&1)));
-diffb= (diffb|((signb&1)&(!(signx|0))))&(!(!(signb|0)&(signx&1)));
-return (diffa^diffb)|(!(a+~x+1)|!(b+~x+1));
+  int xa = x ^ a;
+  int xb = x ^ b;
+  int nx = ~x;
+  int na = ~a;
+  int nb = ~b;
+
+  // A = (x >= a)
+  int diff_a = x + na + 1;          // x - a
+  int diff_x_a = diff_a ^ x;
+  int mask_a = xa & diff_x_a;
+  int sign_a = (diff_a ^ mask_a) >> 31;
+  int A = !sign_a;
+
+  // C = (x >= b)
+  int diff_b = x + nb + 1;          // x - b
+  int diff_x_b = diff_b ^ x;
+  int mask_b = xb & diff_x_b;
+  int sign_b = (diff_b ^ mask_b) >> 31;
+  int C = !sign_b;
+
+  // B = (b >= x)  等价于 x <= b
+  int diff_bx = b + nx + 1;         // b - x
+  int diff_b_bx = diff_bx ^ b;
+  int mask_bx = xb & diff_b_bx;
+  int sign_bx = (diff_bx ^ mask_bx) >> 31;
+  int B = !sign_bx;
+
+  // D = (a >= x)  等价于 x <= a
+  int diff_ax = a + nx + 1;         // a - x
+  int diff_a_ax = diff_ax ^ a;
+  int mask_ax = xa & diff_a_ax;
+  int sign_ax = (diff_ax ^ mask_ax) >> 31;
+  int D = !sign_ax;
+
+  return (A & B) | (C & D);
 }
 
 // P13
@@ -591,10 +618,11 @@ int bitReverse(int x){
   int m0F = 0x0F | (0x0F << 8);
   m0F = m0F | (m0F << 16);   // 0x0F0F0F0F
   int mFF = 0xFF | (0xFF << 16); 
+  int m16 = 0xFF | (0xFF << 8);
   x = ((x >> 1) & m55) | ((x & m55) << 1);
   x = ((x >> 2) & m33) | ((x & m33) << 2);
   x = ((x >> 4) & m0F) | ((x & m0F) << 4);
   x = ((x >> 8) & mFF) | ((x & mFF) << 8);
-  x = ((x >> 16) & ((0xFF<<8)|0xFF)) | ((x & (0xFF<<8|0xFF)) << 16); // 修正16位交换掩码
+  x = ((x >> 16) & m16) | ((x & m16) << 16); // 修正16位交换掩码
   return x;
 }
