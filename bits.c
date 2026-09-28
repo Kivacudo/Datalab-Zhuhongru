@@ -269,16 +269,9 @@ int oddParity(int x) {
  *   Rating: 5
  */
 int rotateRightBits(int x, int n) {
-  int all1 = ~0;
-  int nz = !n;
-  int sel = ~(nz + ~0);
-  int realN = n & (all1 + nz);
-  int lowMask = ~(all1 << realN);
-  int lowBits = x & lowMask;
-  int highPart = (x >> realN) & ~((1 << 31) >> realN << 1);
-  int shiftAmt = 32 + ~realN + 1;
-  int rotVal = highPart | (lowBits << shiftAmt);
-  return (sel & x) | (~sel & rotVal);
+  int LB = (x>>n)&(~(1<<31>>n<<1));
+  int HB = x<<((32+~n+1)&31);
+  return LB|HB;
 }
 
 // P10
@@ -293,15 +286,12 @@ int rotateRightBits(int x, int n) {
  *   Rating: 5
  */
 int roundEvenPow2(int x, int n) {
-  int pow2 = 1 << n;
-  int half = pow2 >> 1;
-  int rem = x & (pow2 + ~0);
-  int q = x >> n;
-  int mask = ((rem + ~half) >> 31); // rem > half → 0
-  int midMask = !(rem ^ half);
-  int qOdd = q & 1;
-  int add = (mask | (midMask & qOdd)) & pow2;
-  return (x & ~(pow2 + ~0)) + add;
+  int pow2= 1<<n;
+  int scissorleft=pow2+~0;
+  int sthleft =x & scissorleft;
+  int newleft = (((x>>n)&1) + ((pow2>>1)+~0)+sthleft)&pow2;
+  int round=newleft+(x&(~pow2+1));
+  return round;
 }
 
 // P11
@@ -317,12 +307,14 @@ int roundEvenPow2(int x, int n) {
  *   Rating: 5
  */
 int midpointTowardFirst(int x, int y) {
-  int andxy = x & y;
-  int xorxy = x ^ y;
-  int base = andxy + (xorxy >> 1);
-  int lsb = xorxy & 1;
-  int xlsb = x & 1;
-  return base + (lsb & xlsb);
+int res_floor = (x & y) + ((x ^ y) >> 1); 
+    int sx = (x >> 31) & 1;
+    int sy = (y >> 31) & 1;
+    int diff = x + ~y + 1;
+    int sd = (diff >> 31) & 1;
+    int x_ge_y = (!sx & sy) | (!(sx ^ sy) & !sd);
+    int odd = (x ^ y) & 1;
+    return res_floor + (x_ge_y & odd);
 }
 
 
@@ -336,11 +328,14 @@ int midpointTowardFirst(int x, int y) {
  *   Rating: 7
  */
 int isBetweenEitherOrder(int x, int a, int b) {
-  int ge_a = !((x + ~a + 1) >> 31); // x >= a
-  int le_b = !((b + ~x + 1) >> 31); // x <= b
-  int ge_b = !((x + ~b + 1) >> 31); // x >= b
-  int le_a = !((a + ~x + 1) >> 31); // x <= a
-  return (ge_a & le_b) | (ge_b & le_a);
+int diffa=((a+~x+1)>>31)&1;//a-x
+int signa=(a>>31)&1;
+int signx=(x>>31)&1;
+int signb=(b>>31)&1;
+int diffb=((b+~x+1)>>31)&1;//b-x
+diffa= (diffa|((signa&1)&(!(signx|0))))&(!(!(signa|0)&(signx&1)));
+diffb= (diffb|((signb&1)&(!(signx|0))))&(!(!(signb|0)&(signx&1)));
+return (diffa^diffb)|(!(a+~x+1))|(!(b+~x+1));
 }
 
 // P13
@@ -353,14 +348,24 @@ int isBetweenEitherOrder(int x, int a, int b) {
  *   Rating: 7
  */
 int mul5Sat(int x) {
-  int x5 = (x << 2) + x;
-  int signX = x >> 31;
-  int signX5 = x5 >> 31;
-  int overflow = signX ^ signX5;
-  int satMin = 1 << 31;
-  int satMax = ~satMin;
-  int satVal = (signX & satMin) | (~signX & satMax);
-  return (overflow & satVal) | (~overflow & x5);
+    int x4 = x << 2;
+    int sum = x + x4;
+    int signX = x >> 31;
+    int signSum = sum >> 31;
+    
+    // 左移溢出判断：左移后右移回原值则无溢出
+    int ov_shift_bool = !!((x4 >> 2) ^ x);
+    int ov_shift = ~(ov_shift_bool + ~0); // 转成全1/全0掩码
+    // 加法溢出判断：同号相加符号改变
+    int ov_add = (~(signX ^ (x4 >> 31))) & (signX ^ signSum);
+    
+    int overflow = ov_shift | ov_add;
+    
+    int minVal = 1 << 31;
+    int maxVal = ~minVal;
+    int sat = (signX & minVal) | (~signX & maxVal);
+    
+    return (~overflow & sum) | (overflow & sat);
 }
 
 // P14
@@ -373,15 +378,17 @@ int mul5Sat(int x) {
  *   Rating: 7
  */
 int classifyAdd3(int x, int y, int z) {
-  int s1 = x + y;
-  int ov1 = ((x ^ s1) & (y ^ s1)) >> 31;
-  int s = s1 + z;
-  int ov2 = ((s1 ^ s) & (z ^ s)) >> 31;
-  int totalOv = ov1 | ov2;
-  int signS = s >> 31;
-  int posOv = totalOv & ~signS; // overflow positive → >INT_MAX return 1
-  int negOv = totalOv & signS;  // overflow negative → <INT_MIN return -1
-  return posOv + (~negOv + 1);
+    int s1 = x + y;
+    int ov1 = (~((x>>31) ^ (y>>31))) & ((x>>31) ^ (s1>>31));
+    int pos_ov1 = ov1 & (x >> 31);
+    int neg_ov1 = ov1 & ~(x >> 31);
+    int s2 = s1 + z;
+    int ov2 = (~((s1>>31) ^ (z>>31))) & ((s1>>31) ^ (s2>>31));
+    int pos_ov2 = ov2 & (s1 >> 31);
+    int neg_ov2 = ov2 & ~(s1 >> 31);
+    int classified = (pos_ov1|pos_ov2)+~(neg_ov1|neg_ov2)+1 ;
+    
+    return classified;
 }
 
 // P15
@@ -398,25 +405,51 @@ int classifyAdd3(int x, int y, int z) {
  *   Rating: 7
  */
 unsigned floatScaleThreeHalves(unsigned uf) {
-  unsigned sign = uf >> 31;
-  unsigned exp = (uf >> 23) & 0xFF;
-  unsigned frac = uf & 0x7FFFFF;
-  if(exp == 0xFF) { // NaN / Inf
-    return uf;
-  }
-  if(exp == 0) { // denormal
-    unsigned newFrac = frac + (frac >> 1);
-    return (sign << 31) | newFrac;
-  }
-  // normalized
-  unsigned newExp = exp + 1;
-  unsigned newFrac = frac + (frac >> 1);
-  if(newFrac & 0x800000) { // carry out
-    newExp += 1;
-    newFrac = newFrac & 0x7FFFFF;
-  }
-  return (sign << 31) | (newExp << 23) | newFrac;
+    unsigned exp = (uf >> 23) & 0xFF;
+    unsigned frac = uf & 0x7FFFFF;
+    unsigned sign = uf >> 31;
+    
+    if (exp == 0xFF) return uf; // NaN / Inf 直接返回
+    
+    if (exp == 0) {
+        // 非规格化数：frac * 1.5，round to even
+        unsigned m = frac;
+        unsigned m3 = m + (m << 1); // *3
+        unsigned guard = m3 & 1;
+        unsigned lsb = (m3 >> 1) & 1;
+        unsigned round_up = guard & lsb;
+        unsigned m2 = (m3 >> 1) + round_up;
+        
+        if (m2 >= (1 << 23)) {
+            // 进位到规格化数
+            exp = 1;
+            frac = m2 & 0x7FFFFF;
+        } else {
+            frac = m2;
+        }
+        return (sign << 31) | (exp << 23) | frac;
+    }
+    
+    // 规格化数：尾数 * 1.5，round to even
+    unsigned m = (1 << 23) | frac;
+    unsigned m3 = m + (m << 1); // *3
+    unsigned guard = m3 & 1;
+    unsigned lsb = (m3 >> 1) & 1;
+    unsigned round_up = guard & lsb;
+    unsigned m2 = (m3 >> 1) + round_up;
+    
+    if (m2 >= (1 << 24)) {
+        exp += 1;
+        m2 >>= 1;
+    }
+    frac = m2 & 0x7FFFFF;
+    
+    if (exp >= 0xFF) {
+        return (sign << 31) | 0x7F800000; // 溢出到无穷大
+    }
+    return (sign << 31) | (exp << 23) | frac+1;
 }
+
 
 // P16
 /* 
@@ -434,26 +467,39 @@ unsigned floatRoundEven(unsigned uf) {
   unsigned sign = uf >> 31;
   unsigned exp = (uf >> 23) & 0xFF;
   unsigned frac = uf & 0x7FFFFF;
-  int e = exp - 127;
-  if(exp == 0xFF) return uf;
-  if(e < 0) { // abs<1 → round to 0, keep sign
-    return sign << 31;
-  }
-  if(e >= 23) return uf; // no fractional bits
+  if (exp == 0xFF) return uf; // NaN / Inf
+  if (exp == 0) return sign << 31; // 非规格化数都小于 1，直接舍入到 0
+  int e = exp - 127; // 实际指数
+  if (e >= 23) return uf; // 指数 >=23，本身就是整数
+  if (e < -1) return sign << 31; // 指数 <=-2，绝对值 <0.5，舍入到 0
+  if (e == -1) {
+    // 0.5 <= |x| < 1，单独处理
+    unsigned guard = 1;
+    unsigned sticky = frac != 0;
+    unsigned lsb = 0; // 整数部分是 0，偶数
+    unsigned round_up = guard & (sticky | lsb);
+    if (round_up) {
+      return (sign << 31) | (127u << 23); // 舍入到 1.0
+    } 
+    else {
+      return sign << 31; // 舍入到 0
+    }
+  }  
+  // 0 <= e <=22：右移尾数舍入到整数
   unsigned shift = 23 - e;
-  unsigned mask = (1 << shift) - 1;
-  unsigned fracPart = frac & mask;
-  unsigned half = 1 << (shift - 1);
-  if(fracPart > half) {
-    frac += mask + 1;
-  } else if(fracPart == half) {
-    if(frac & (1 << shift)) frac += mask + 1;
-  }
-  if(frac & 0x800000) {
-    exp +=1;
-    frac &= 0x7FFFFF;
-  }
-  return (sign << 31) | (exp << 23) | frac;
+  unsigned m = (1 << 23) | frac;
+  unsigned guard = (m >> (shift - 1)) & 1;
+  unsigned sticky = m & ((1 << (shift - 1)) - 1);
+  unsigned lsb = (m >> shift) & 1;
+  unsigned round_up = guard & (sticky | lsb);
+  unsigned int_val = (m >> shift) + round_up;
+  // 整数转回浮点数
+  unsigned k = 0;
+  unsigned tmp = int_val;
+  while (tmp >>= 1) k++;
+  unsigned new_exp = 127 + k;
+  unsigned new_frac = (int_val << (23 - k)) & 0x7FFFFF;
+  return (sign << 31) | (new_exp << 23) | new_frac;
 }
 
 // P17
@@ -467,31 +513,36 @@ unsigned floatRoundEven(unsigned uf) {
  *   Rating: 10
  */
 unsigned float_i2f(int x) {
-  unsigned sign = 0;
-  unsigned absX = x;
-  unsigned exp, frac;
-  unsigned shift, mask, roundBit;
-  if(x == 0) return 0;
-  if(x < 0) {
-    sign = 1;
-    absX = ~x + 1;
-  }
-  shift = 31;
-  while( !(absX & (1 << shift)) ) shift--;
-  exp = shift + 127;
-  absX <<= (31 - shift);
-  frac = (absX >> 8) & 0x7FFFFF;
-  mask = 0xFF;
-  roundBit = absX & mask;
-  if(roundBit > 0x80 || (roundBit == 0x80 && (frac & 1))) {
-    frac += 1;
-    if(frac & 0x800000) {
-      exp += 1;
-      frac = frac & 0x7FFFFF;
+    if (x == 0) return 0;
+    unsigned sign = x >> 31;
+    unsigned absX = x;
+    if (sign) absX = ~x + 1;
+    
+    unsigned exp = 127 + 31;
+    unsigned frac = absX;
+    
+    // 左移到最高位为 1
+    while ((frac & (1u << 31)) == 0) {
+        frac <<= 1;
+        exp = exp + ~0; // exp--，修正此处
     }
-  }
-  return (sign << 31) | (exp << 23) | frac;
+    
+    // 舍掉低 8 位，round to even
+    unsigned guard = (frac >> 7) & 1;
+    unsigned sticky = frac & 0x7F;
+    unsigned lsb = (frac >> 8) & 1;
+    unsigned round_up = guard & (sticky | lsb);
+    
+    unsigned temp = (frac >> 8) + round_up;
+    if (temp & (1u << 24)) { // 进位到第 24 位，指数 +1
+        exp += 1;
+        temp >>= 1;
+    }
+    frac = temp & 0x7FFFFF;
+    
+    return (sign << 31) | (exp << 23) | frac;
 }
+
 
 
 
@@ -511,7 +562,6 @@ int bitCount(int x) {
   int m0F = 0x0F | (0x0F << 8);
   m0F = m0F | (m0F << 16);
   int mFF = 0xFF | (0xFF << 16);
-
   x = (x & m55) + ((x >> 1) & m55);
   x = (x & m33) + ((x >> 2) & m33);
   x = (x + (x >> 4)) & m0F;
@@ -531,17 +581,16 @@ int bitCount(int x) {
  */
 int bitReverse(int x){
   int m55 = 0x55 | (0x55 << 8);
-  m55 = m55 | (m55 << 16);
+  m55 = m55 | (m55 << 16);   // 0x55555555
   int m33 = 0x33 | (0x33 << 8);
-  m33 = m33 | (m33 << 16);
+  m33 = m33 | (m33 << 16);   // 0x33333333
   int m0F = 0x0F | (0x0F << 8);
-  m0F = m0F | (m0F << 16);
-  int mFF = 0xFF | (0xFF << 16);
-
+  m0F = m0F | (m0F << 16);   // 0x0F0F0F0F
+  int mFF = 0xFF | (0xFF << 16); 
   x = ((x >> 1) & m55) | ((x & m55) << 1);
   x = ((x >> 2) & m33) | ((x & m33) << 2);
   x = ((x >> 4) & m0F) | ((x & m0F) << 4);
   x = ((x >> 8) & mFF) | ((x & mFF) << 8);
-  x = ((x >> 16) & mFF) | ((x & mFF) << 16);
+  x = ((x >> 16) & 0xFFFF) | ((x & 0xFFFF) << 16); // 修正16位交换掩码
   return x;
 }
