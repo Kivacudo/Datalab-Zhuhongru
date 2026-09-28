@@ -335,7 +335,7 @@ int signb=(b>>31)&1;
 int diffb=((b+~x+1)>>31)&1;//b-x
 diffa= (diffa|((signa&1)&(!(signx|0))))&(!(!(signa|0)&(signx&1)));
 diffb= (diffb|((signb&1)&(!(signx|0))))&(!(!(signb|0)&(signx&1)));
-return (diffa^diffb)|(!(a+~x+1))|(!(b+~x+1));
+return (diffa^diffb)|(!(a+~x+1)|!(b+~x+1));
 }
 
 // P13
@@ -382,12 +382,13 @@ int classifyAdd3(int x, int y, int z) {
     int ov1 = (~((x>>31) ^ (y>>31))) & ((x>>31) ^ (s1>>31));
     int pos_ov1 = ov1 & (x >> 31);
     int neg_ov1 = ov1 & ~(x >> 31);
+    
     int s2 = s1 + z;
     int ov2 = (~((s1>>31) ^ (z>>31))) & ((s1>>31) ^ (s2>>31));
     int pos_ov2 = ov2 & (s1 >> 31);
     int neg_ov2 = ov2 & ~(s1 >> 31);
+
     int classified = (pos_ov1|pos_ov2)+~(neg_ov1|neg_ov2)+1 ;
-    
     return classified;
 }
 
@@ -439,15 +440,18 @@ unsigned floatScaleThreeHalves(unsigned uf) {
     unsigned m2 = (m3 >> 1) + round_up;
     
     if (m2 >= (1 << 24)) {
-        exp += 1;
-        m2 >>= 1;
+      exp += 1;
+      unsigned guard2 = m2 & 1;
+      unsigned lsb2 = (m2 >> 1) & 1;
+      unsigned round_up2 = guard2 & lsb2;
+      m2 = (m2 >> 1) + round_up2;
     }
     frac = m2 & 0x7FFFFF;
     
     if (exp >= 0xFF) {
         return (sign << 31) | 0x7F800000; // 溢出到无穷大
     }
-    return (sign << 31) | (exp << 23) | frac+1;
+    return (sign << 31) | (exp << 23) | frac;
 }
 
 
@@ -489,7 +493,7 @@ unsigned floatRoundEven(unsigned uf) {
   unsigned shift = 23 - e;
   unsigned m = (1 << 23) | frac;
   unsigned guard = (m >> (shift - 1)) & 1;
-  unsigned sticky = m & ((1 << (shift - 1)) - 1);
+  unsigned sticky = !!(m & ((1u << (shift - 1)) - 1u));
   unsigned lsb = (m >> shift) & 1;
   unsigned round_up = guard & (sticky | lsb);
   unsigned int_val = (m >> shift) + round_up;
@@ -529,7 +533,7 @@ unsigned float_i2f(int x) {
     
     // 舍掉低 8 位，round to even
     unsigned guard = (frac >> 7) & 1;
-    unsigned sticky = frac & 0x7F;
+    unsigned sticky = !!(frac & ((1u << 7) - 1u));
     unsigned lsb = (frac >> 8) & 1;
     unsigned round_up = guard & (sticky | lsb);
     
@@ -591,6 +595,6 @@ int bitReverse(int x){
   x = ((x >> 2) & m33) | ((x & m33) << 2);
   x = ((x >> 4) & m0F) | ((x & m0F) << 4);
   x = ((x >> 8) & mFF) | ((x & mFF) << 8);
-  x = ((x >> 16) & 0xFFFF) | ((x & 0xFFFF) << 16); // 修正16位交换掩码
+  x = ((x >> 16) & ((0xFF<<8)|0xFF)) | ((x & (0xFF<<8|0xFF)) << 16); // 修正16位交换掩码
   return x;
 }
