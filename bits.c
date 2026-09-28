@@ -217,9 +217,11 @@ int logicalShift(int x, int n) {
  *   Rating: 4
  */
 int swapNibblePairs(int x) {
-  int byteHigh = (x >> 4) & 0x0F0F0F0F;
-  int byteLow = (x << 4) & 0xF0F0F0F0;
-  return byteHigh^byteLow;
+  int mask0F = ((0x0F << 8) | 0x0F) << 16 | ((0x0F << 8) | 0x0F);
+  int maskF0 = ((0xF0 << 8) | 0xF0) << 16 | ((0xF0 << 8) | 0xF0);
+  int byteHigh = (x >> 4) & mask0F;
+  int byteLow = (x << 4) & maskF0;
+  return byteHigh ^ byteLow;
 }
 
 // P7
@@ -267,10 +269,16 @@ int oddParity(int x) {
  *   Rating: 5
  */
 int rotateRightBits(int x, int n) {
-  int ans = (x >> n) & (~(1 << 31) >> (n-1));
-  int mask = ~((-1)<<n);
-  int High = (mask & x) << (32+(~n+1));
-  return ans|High;
+  int all1 = ~0;
+  int nz = !n;
+  int sel = ~(nz + ~0);
+  int realN = n & (all1 + nz);
+  int lowMask = ~(all1 << realN);
+  int lowBits = x & lowMask;
+  int highPart = (x >> realN) & ~((1 << 31) >> realN << 1);
+  int shiftAmt = 32 + ~realN + 1;
+  int rotVal = highPart | (lowBits << shiftAmt);
+  return (sel & x) | (~sel & rotVal);
 }
 
 // P10
@@ -496,17 +504,20 @@ unsigned float_i2f(int x) {
  *   Rating: 10
  */
 int bitCount(int x) {
-  int mask1 = 0x55555555;
-  int mask2 = 0x33333333;
-  int mask4 = 0x0F0F0F0F;
-  int mask8 = 0x00FF00FF;
-  int mask16 = 0x0000FFFF;
-  x = (x & mask1) + ((x >> 1) & mask1);
-  x = (x & mask2) + ((x >> 2) & mask2);
-  x = (x & mask4) + ((x >> 4) & mask4);
-  x = (x & mask8) + ((x >> 8) & mask8);
-  x = (x & mask16) + ((x >> 16) & mask16);
-  return x;
+  int m55 = 0x55 | (0x55 << 8);
+  m55 = m55 | (m55 << 16);
+  int m33 = 0x33 | (0x33 << 8);
+  m33 = m33 | (m33 << 16);
+  int m0F = 0x0F | (0x0F << 8);
+  m0F = m0F | (m0F << 16);
+  int mFF = 0xFF | (0xFF << 16);
+
+  x = (x & m55) + ((x >> 1) & m55);
+  x = (x & m33) + ((x >> 2) & m33);
+  x = (x + (x >> 4)) & m0F;
+  x = (x & mFF) + ((x >> 8) & mFF);
+  x = x + (x >> 16);
+  return x & 0x3F;
 }
 
 // P19
@@ -519,15 +530,18 @@ int bitCount(int x) {
  *   Rating: 10
  */
 int bitReverse(int x){
-  int mask1 = 0x55555555;
-  int mask2 = 0x33333333;
-  int mask4 = 0x0F0F0F0F;
-  int mask8 = 0x00FF00FF;
-  int mask16 = 0x0000FFFF;
-  x = ((x >> 1) & mask1) | ((x & mask1) << 1);
-  x = ((x >> 2) & mask2) | ((x & mask2) << 2);
-  x = ((x >> 4) & mask4) | ((x & mask4) << 4);
-  x = ((x >> 8) & mask8) | ((x & mask8) << 8);
-  x = ((x >> 16) & mask16) | ((x & mask16) << 16);
+  int m55 = 0x55 | (0x55 << 8);
+  m55 = m55 | (m55 << 16);
+  int m33 = 0x33 | (0x33 << 8);
+  m33 = m33 | (m33 << 16);
+  int m0F = 0x0F | (0x0F << 8);
+  m0F = m0F | (m0F << 16);
+  int mFF = 0xFF | (0xFF << 16);
+
+  x = ((x >> 1) & m55) | ((x & m55) << 1);
+  x = ((x >> 2) & m33) | ((x & m33) << 2);
+  x = ((x >> 4) & m0F) | ((x & m0F) << 4);
+  x = ((x >> 8) & mFF) | ((x & mFF) << 8);
+  x = ((x >> 16) & mFF) | ((x & mFF) << 16);
   return x;
 }
